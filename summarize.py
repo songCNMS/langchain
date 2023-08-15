@@ -108,14 +108,18 @@ class ChineseSplitter(TextSplitter):
         return get_chunks(text)
 
 
+from omegaconf import OmegaConf
 
 if __name__ == "__main__":
+    cli_cfg = OmegaConf.from_cli()
+
+
     llm = AzureChatOpenAI(temperature=0, deployment_name="gpt-4-32k")
     text_splitter = ChineseSplitter()
     file_dir = "./data/食品政策文档/"
     abstract_dir =f"{file_dir}/abstracts/"
     os.makedirs(abstract_dir, exist_ok=True)
-    product_name = "荔枝"
+    product_name = cli_cfg.product
     for file_loc in list_files_recursive(file_dir):
         print(file_loc)
         ext = os.path.splitext(file_loc)[1]
