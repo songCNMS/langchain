@@ -112,9 +112,10 @@ class ChineseSplitter(TextSplitter):
 if __name__ == "__main__":
     llm = AzureChatOpenAI(temperature=0, deployment_name="gpt-4-32k")
     text_splitter = ChineseSplitter()
-    file_dir = "./data/烟草类文件/"
+    file_dir = "./data/食品政策文档/"
     abstract_dir =f"{file_dir}/abstracts/"
     os.makedirs(abstract_dir, exist_ok=True)
+    product_name = "荔枝"
     for file_loc in list_files_recursive(file_dir):
         print(file_loc)
         ext = os.path.splitext(file_loc)[1]
@@ -124,14 +125,15 @@ if __name__ == "__main__":
         texts = text_splitter.split_text(text)
         print("size of texts: ", len(texts))
         docs = [Document(page_content=t) for t in texts]
-        prompt_template = """你是一名标书写作专家，请根据如下描述提取其中对标书写作比较重要的要求和事项，结果文本中请保留章节等结构信息。:
+        prompt_template = f"请从如下描述中提取并总结出跟{product_name}相关的进出口和物品寄递政策。\n"
+        prompt_template += """
         {text}
         摘要为:"""
         PROMPT = PromptTemplate(template=prompt_template, input_variables=["text"])
         chain = load_summarize_chain(llm, chain_type="map_reduce", return_intermediate_steps=True, map_prompt=PROMPT, combine_prompt=PROMPT)
         abstract = chain({"input_documents": docs}, return_only_outputs=True)
         print(abstract)
-        with open(f"{abstract_dir}/{file_name}_abstract.txt", "w") as f:
+        with open(f"{abstract_dir}/{file_name}_{product_name}_abstract.txt", "w") as f:
             f.writelines(abstract["output_text"])
 
 
