@@ -81,7 +81,7 @@ def get_text(file_loc):
     return text
 
 
-def get_chunks(text, max_len_per_chunk=2000):
+def get_chunks(text, max_len_per_chunk=10000):
     if len(text) <= max_len_per_chunk: return [text]
     paragraph_list = text.split("。")
     chunk_list = []
@@ -126,10 +126,16 @@ def recall_rules_from_doc(all_rules, product_name, file_dir):
         {text}
         """ + f"摘要为："
         PROMPT = PromptTemplate(template=prompt_template, input_variables=["text"])
-        chain = load_summarize_chain(llm, chain_type="map_reduce", return_intermediate_steps=True, map_prompt=PROMPT, combine_prompt=PROMPT)
-        abstract = chain({"input_documents": docs}, return_only_outputs=True)
+        abstract = {"output_text": "无"}
+        for _ in range(5):
+            try:
+                chain = load_summarize_chain(llm, chain_type="map_reduce", return_intermediate_steps=True, map_prompt=PROMPT, combine_prompt=PROMPT)
+                abstract = chain({"input_documents": docs}, return_only_outputs=True)
+                break
+            except:
+                continue
         # print(abstract)
-        if abstract["output_text"] == "无": continue
+        if abstract["output_text"].startswith("无"): continue
         else: rules += f"\n {abstract['output_text']}"
     all_rules[product_name] = rules
     return all_rules
@@ -149,7 +155,7 @@ from customGPT.gpt4custom import *
 
 if __name__ == "__main__":
     cli_cfg = OmegaConf.from_cli()
-    llm = AzureChatOpenAI(temperature=0, deployment_name="gpt-4-32k", model="gpt-4-32k")
+    llm = AzureChatOpenAI(temperature=0, deployment_name="gpt-4-32k", model="gpt-4-32k", max_tokens=2000)
     text_splitter = ChineseSplitter()
     file_dir = "./data/食品政策文档/"
     abstract_dir =f"{file_dir}/abstracts/"
@@ -157,7 +163,8 @@ if __name__ == "__main__":
 
     date_prefix = datetime.today().strftime('%m-%d-%H-%M')
     rules_file_loc = f"data/extracted_rules.csv"
-    res_file_loc = f"data/gpt_res_{date_prefix}.csv"
+    # res_file_loc = f"data/gpt_res_{date_prefix}.csv"
+    res_file_loc = f"data/gpt_res.csv"
 
     question_file_loc = "../customGPT/data/关务食品类材料2023803/食品类收寄标准-0803.xlsx"
     df_questions = pd.read_excel(question_file_loc, sheet_name="测试数据")
@@ -166,18 +173,25 @@ if __name__ == "__main__":
     # questions_list = [["饼干","个人"]]
 
     all_rules = {}
+    res_list = []
+    
     if os.path.exists(rules_file_loc):
         df = pd.read_csv(rules_file_loc, encoding='utf-8', sep='\t')
-        all_rules = {row["Product"]: row["Rules"] for _, row in df.iterrows()}
-    res_list = []
+        for _, row in df.iterrows():
+            all_rules = {row["Product"]: row["Rules"] }
+            res_list.append([row["Product"], row["Rules"]])
     q_r_list = []
+    if os.path.exists(res_file_loc):
+        df = pd.read_csv(res_file_loc, encoding='utf-8', sep='\t')
+        q_r_list.extend(row.tolist() for _, row in df.iterrows())
+        
     policies_file_dir = "data/食品政策文档"
     # product_name = cli_cfg.product
-    for i, (product_name, entity) in enumerate(questions_list):
+    for i, (product_name, entity) in enumerate(questions_list[len(q_r_list):]):
         food_prompt = get_food_prompt(product_name)
         res = get_gpt_response(food_prompt).strip()
         print(f"{i+1}/{len(questions_list)}", product_name, res)
-        time.sleep(1)
+        time.sleep(2)
         if res != "是": continue
         all_rules = recall_rules_from_doc(all_rules, product_name, policies_file_dir)
         rules = all_rules[product_name]
@@ -185,12 +199,12 @@ if __name__ == "__main__":
         df = pd.DataFrame(data=res_list, columns=["Product", "Rules"])
         df.to_csv(rules_file_loc, index=False, encoding='utf-8', sep='\t')
         extra_info = query_gpt((product_name, entity))
-        time.sleep(1)
+        time.sleep(2)
         prompt = get_prompt((product_name, entity), rules, extra_info=extra_info)
         res = get_gpt_response(prompt).strip()
         q_r_list.append([product_name, entity, rules, prompt, res])
         df = pd.DataFrame(q_r_list, columns=["Product", "Entity", "Rules", "Prompt", "GPT"])
         df.to_csv(res_file_loc, index=False, encoding='utf-8', sep='\t')
-        time.sleep(1)
+        time.sleep(2)
 
 
